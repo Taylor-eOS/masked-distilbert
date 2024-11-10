@@ -4,7 +4,7 @@ import glob
 import random
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, random_split, Subset
 from transformers import DistilBertTokenizerFast, DistilBertForMaskedLM, AdamW, get_linear_schedule_with_warmup
 from tqdm import tqdm
 
@@ -58,18 +58,16 @@ tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
 dataset = TextDataset(all_texts, tokenizer, max_length=512)
 val_size = int(0.1 * len(dataset))
 train_size = len(dataset) - val_size
-train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-print(f"Training samples: {len(train_dataset)}")
+train_dataset_full, val_dataset = random_split(dataset, [train_size, val_size])
+print(f"Training samples: {train_size}")
 print(f"Validation samples: {len(val_dataset)}")
-batch_size = 4
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+batch_size = 8
+epochs = 50
+learning_rate = 5e-4
+epsilon = 1e-8
 model = DistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
 model.to(device)
-epochs = 5
-learning_rate = 5e-5
-epsilon = 1e-8
-total_steps = len(train_loader) * epochs
+total_steps = (train_size // 64) * epochs
 optimizer = AdamW(model.parameters(), lr=learning_rate, eps=epsilon)
 scheduler = get_linear_schedule_with_warmup(
     optimizer,
@@ -77,11 +75,18 @@ scheduler = get_linear_schedule_with_warmup(
     num_training_steps=total_steps
 )
 best_val_loss = float('inf')
+
 for epoch in range(epochs):
     print(f"\n======== Epoch {epoch + 1} / {epochs} ========")
     print("Training...")
     model.train()
     total_train_loss = 0
+    if train_size < 64:
+        indices = list(range(train_size))
+    else:
+        indices = random.sample(range(train_size), 64)
+    train_subset = Subset(train_dataset_full, indices)
+    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=0)
     for batch in tqdm(train_loader, desc="Training"):
         optimizer.zero_grad()
         input_ids = batch['input_ids'].to(device)
@@ -101,6 +106,7 @@ for epoch in range(epochs):
     print("Running Validation...")
     model.eval()
     total_val_loss = 0
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     with torch.no_grad():
         for batch in tqdm(val_loader, desc="Validation"):
             input_ids = batch['input_ids'].to(device)
