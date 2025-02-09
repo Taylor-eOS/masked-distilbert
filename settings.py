@@ -1,14 +1,28 @@
-import os
-from transformers import DistilBertTokenizerFast, DistilBertForMaskedLM
+from transformers import DistilBertTokenizerFast, DistilBertForMaskedLM, RobertaTokenizerFast, RobertaForMaskedLM
 
-#Switch between train and pretrained models
-USE_PRETRAINED = True
+# Set the model to use
+USE_MODEL = "roberta"
 
-if USE_PRETRAINED:
-    # Pretrained model settings
-    TOKENIZER = DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
-    MODEL = DistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
-else:
-    # Locally trained model settings
-    TOKENIZER = DistilBertTokenizerFast.from_pretrained('model')
-    MODEL = DistilBertForMaskedLM.from_pretrained('model')
+# Define model choices
+MODEL_CONFIG = {
+    "distilbert": {
+        "tokenizer": DistilBertTokenizerFast.from_pretrained,
+        "model": DistilBertForMaskedLM.from_pretrained,
+        "pretrained_name": "distilbert-base-uncased"
+    },
+    "roberta": {
+        "tokenizer": RobertaTokenizerFast.from_pretrained,
+        "model": RobertaForMaskedLM.from_pretrained,
+        "pretrained_name": "roberta-base"
+    },
+    "local": {
+        "tokenizer": DistilBertTokenizerFast.from_pretrained,
+        "model": DistilBertForMaskedLM.from_pretrained,
+        "pretrained_name": "model"
+    }
+}
+
+config = MODEL_CONFIG.get(USE_MODEL, MODEL_CONFIG["local"])
+TOKENIZER = config["tokenizer"](config["pretrained_name"])
+MODEL = config["model"](config["pretrained_name"])
+
